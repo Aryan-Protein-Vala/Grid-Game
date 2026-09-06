@@ -15,13 +15,62 @@ const TONE_COLORS: Record<string, string> = {
   terracotta: '#b86d52',
 };
 
-function getPlayerTone(name: string): string {
+function getPlayerColor(name: string): { hex: string, name: string } {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  for (const char of name) {
+    hash = char.charCodeAt(0) + ((hash << 5) - hash);
   }
-  const tones = ['charcoal', 'graphite', 'wash', 'terracotta'];
-  return tones[Math.abs(hash) % tones.length];
+  hash = Math.abs(hash);
+
+  const hue = hash % 360;
+  const sat = 20 + ((hash >> 8) % 41);
+  const light = 30 + ((hash >> 16) % 36);
+
+  const h = hue;
+  const s = sat / 100;
+  const l = light / 100;
+
+  let c = (1 - Math.abs(2 * l - 1)) * s;
+  let x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  let m = l - c/2;
+  let r = 0, g = 0, b = 0;
+  if (0 <= h && h < 60) { r = c; g = x; b = 0; }
+  else if (60 <= h && h < 120) { r = x; g = c; b = 0; }
+  else if (120 <= h && h < 180) { r = 0; g = c; b = x; }
+  else if (180 <= h && h < 240) { r = 0; g = x; b = c; }
+  else if (240 <= h && h < 300) { r = x; g = 0; b = c; }
+  else if (300 <= h && h < 360) { r = c; g = 0; b = x; }
+  
+  r = Math.round((r + m) * 255);
+  g = Math.round((g + m) * 255);
+  b = Math.round((b + m) * 255);
+  const hex = "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1);
+
+  let adjective = "";
+  if (sat > 45) adjective = "Vivid";
+  else if (sat < 30) adjective = "Washed";
+  else if (light < 40) adjective = "Deep";
+  else if (light > 55) adjective = "Pale";
+  else adjective = "Muted";
+
+  let noun = "";
+  if (hue < 15 || hue >= 345) noun = "Crimson";
+  else if (hue < 45) noun = "Terracotta";
+  else if (hue < 75) noun = "Ochre";
+  else if (hue < 105) noun = "Olive";
+  else if (hue < 165) noun = "Viridian";
+  else if (hue < 195) noun = "Teal";
+  else if (hue < 255) noun = "Cobalt";
+  else if (hue < 285) noun = "Indigo";
+  else if (hue < 315) noun = "Violet";
+  else noun = "Magenta";
+
+  return { hex, name: `${adjective} ${noun}` };
+}
+
+function resolveColor(tone: string) {
+  if (tone.startsWith('#')) return tone;
+  return TONE_COLORS[tone] || TONE_COLORS['charcoal'];
 }
 
 function IdentityModal({ onSetHandle }: { onSetHandle: (name: string) => void }) {
@@ -102,6 +151,7 @@ function GameCanvas({
 
   const bind = useGesture({
     onDrag: ({ delta: [dx, dy], movement: [mx, my], last }) => {
+      if (mapExpandedRef.current) return;
       cameraOffset.current.x += dx;
       cameraOffset.current.y += dy;
       
@@ -114,6 +164,7 @@ function GameCanvas({
       }
     },
     onWheel: ({ delta: [_, dy], event }) => {
+      if (mapExpandedRef.current) return;
       const zoomSensitivity = 0.005;
       const prevZoom = cameraOffset.current.zoom;
       let newZoom = prevZoom * Math.exp(-dy * zoomSensitivity);
@@ -174,18 +225,18 @@ function GameCanvas({
       for (let x = offX + grid / 2; x <= w; x += grid) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, h); context.stroke() }
       for (let y = offY + grid / 2; y <= h; y += grid) { context.beginPath(); context.moveTo(0, y); context.lineTo(w, y); context.stroke() }
 
-      // Draw Blocks with roughjs
+      // Draw Blocks
       const currentBlocks = blocksRef.current;
       currentBlocks.forEach(block => {
         const px = block.x * grid + cameraOffset.current.x;
         const py = block.y * grid + cameraOffset.current.y;
         
         if (px + grid > 0 && px < w && py + grid > 0 && py < h) {
-           const color = TONE_COLORS[block.tone] || TONE_COLORS['charcoal'];
+           const color = resolveColor(block.tone);
            const isPending = block.status === 'pending';
            rc.rectangle(px, py, grid, grid, {
              fill: color,
-             stroke: TONE_COLORS['charcoal'],
+             stroke: '#3a332b',
              fillStyle: 'hachure',
              fillWeight: isPending ? 0.5 : 1,
              strokeWidth: isPending ? 0.5 : 1,
@@ -217,7 +268,7 @@ function GameCanvas({
 
       // Hover Interaction
       const hoverCoord = hoverCoordRef.current;
-      if (hoverCoord && !isDraggingRef.current) {
+      if (hoverCoord && !isDraggingRef.current && !mapExpandedRef.current) {
         const {x: hx, y: hy} = hoverCoord;
         const px = hx * grid + cameraOffset.current.x;
         const py = hy * grid + cameraOffset.current.y;
@@ -242,18 +293,26 @@ function GameCanvas({
         }
       }
 
-      // Heatmap widget
+      // Minimap Widget
       const isExpanded = mapExpandedRef.current;
-      const heatW = isExpanded ? 312 : 156;
-      const heatH = isExpanded ? 240 : 120;
-      const heatX = w - (isExpanded ? 346 : 190);
-      const heatY = h - (isExpanded ? 284 : 164);
       
-      context.fillStyle = 'rgba(241,232,216,0.92)'; context.fillRect(heatX, heatY, heatW, heatH)
+      if (isExpanded) {
+        // Blur background by overlaying a semi-transparent layer
+        context.fillStyle = 'rgba(238, 229, 212, 0.85)';
+        context.fillRect(0, 0, w, h);
+      }
+      
+      const heatW = isExpanded ? w * 0.8 : 156;
+      const heatH = isExpanded ? h * 0.8 : 120;
+      const heatX = isExpanded ? w * 0.1 : w - 190;
+      const heatY = isExpanded ? h * 0.1 : h - 164;
+      
+      context.fillStyle = isExpanded ? 'rgba(241,232,216,1)' : 'rgba(241,232,216,0.92)'; 
+      context.fillRect(heatX, heatY, heatW, heatH)
       context.strokeStyle = 'rgba(58,51,43,0.46)'; context.strokeRect(heatX, heatY, heatW, heatH)
       context.save(); context.beginPath(); context.rect(heatX, heatY, heatW, heatH); context.clip()
       
-      const gridSpacing = isExpanded ? 16 : 8;
+      const gridSpacing = isExpanded ? (Math.min(heatW, heatH) / 30) : 8;
       for (let x = heatX + gridSpacing; x < heatX + heatW; x += gridSpacing) { context.strokeStyle = 'rgba(58,51,43,0.12)'; context.beginPath(); context.moveTo(x, heatY); context.lineTo(x, heatY + heatH); context.stroke() }
       for (let y = heatY + gridSpacing; y < heatY + heatH; y += gridSpacing) { context.beginPath(); context.moveTo(heatX, y); context.lineTo(heatX + heatW, y); context.stroke() }
       
@@ -263,8 +322,9 @@ function GameCanvas({
         if (normX >= 0 && normX <= 1 && normY >= 0 && normY <= 1) {
             const bx = heatX + normX * heatW;
             const by = heatY + normY * heatH;
-            context.fillStyle = TONE_COLORS[block.tone] || TONE_COLORS['charcoal'];
-            context.fillRect(bx, by, isExpanded ? 5 : 3, isExpanded ? 5 : 3);
+            context.fillStyle = resolveColor(block.tone);
+            const pSize = isExpanded ? 4 : 2;
+            context.fillRect(bx - pSize/2, by - pSize/2, pSize, pSize);
         }
       });
       
@@ -273,20 +333,22 @@ function GameCanvas({
       const viewW = (w / grid) / 5000 * heatW;
       const viewH = (h / grid) / 5000 * heatH;
       context.strokeStyle = 'rgba(184,109,82,0.8)';
-      context.lineWidth = 1;
+      context.lineWidth = isExpanded ? 2 : 1;
       context.strokeRect(heatX + viewPropX * heatW, heatY + viewPropY * heatH, Math.max(2, viewW), Math.max(2, viewH));
 
       context.restore()
-      context.fillStyle = '#3a332b'; context.font = '10px Courier New'; context.fillText('ACTIVITY / LIVE', heatX + 9, heatY + 15)
+      context.fillStyle = '#3a332b'; context.font = isExpanded ? '14px Courier New' : '10px Courier New'; 
+      context.fillText(isExpanded ? 'SATELLITE VIEW' : 'ACTIVITY / LIVE', heatX + 9, heatY + (isExpanded ? 20 : 15))
 
       // Draw minimap tooltip if hovering over a block
       if (minimapHoverRef.current) {
         const { name, mx, my } = minimapHoverRef.current;
-        context.fillStyle = 'rgba(58,51,43,0.9)';
+        context.fillStyle = 'rgba(58,51,43,0.95)';
+        context.font = '12px Courier New';
         const textWidth = context.measureText(name).width;
-        context.fillRect(mx + 10, my - 20, textWidth + 12, 18);
+        context.fillRect(mx + 10, my - 24, textWidth + 16, 22);
         context.fillStyle = '#f3eadc';
-        context.fillText(name, mx + 16, my - 7);
+        context.fillText(name, mx + 18, my - 8);
       }
 
       frame = requestAnimationFrame(draw)
@@ -307,33 +369,32 @@ function GameCanvas({
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     
-    // Check Minimap hover
     const isExpanded = mapExpandedRef.current;
-    const heatW = isExpanded ? 312 : 156;
-    const heatH = isExpanded ? 240 : 120;
-    const heatX = w - (isExpanded ? 346 : 190);
-    const heatY = h - (isExpanded ? 284 : 164);
+    const heatW = isExpanded ? w * 0.8 : 156;
+    const heatH = isExpanded ? h * 0.8 : 120;
+    const heatX = isExpanded ? w * 0.1 : w - 190;
+    const heatY = isExpanded ? h * 0.1 : h - 164;
     
     if (mx >= heatX && mx <= heatX + heatW && my >= heatY && my <= heatY + heatH) {
-      // We are over the minimap
       const propX = (mx - heatX) / heatW;
       const propY = (my - heatY) / heatH;
       const targetGridX = Math.floor((propX * 5000) - 2500);
       const targetGridY = Math.floor((propY * 5000) - 2500);
       
-      // Search for a block near these coordinates (we use a small radius because the map is zoomed out)
-      const radius = isExpanded ? 15 : 30; // logical grid units
+      const radius = isExpanded ? 10 : 30; 
       const found = blocksRef.current.find(b => Math.abs(b.x - targetGridX) < radius && Math.abs(b.y - targetGridY) < radius);
       if (found) {
         minimapHoverRef.current = { name: found.owner, mx, my };
       } else {
         minimapHoverRef.current = null;
       }
-      return; // Skip normal grid hover
+      return;
     } else {
       minimapHoverRef.current = null;
     }
     
+    if (isExpanded) return;
+
     const gx = Math.floor((mx - cameraOffset.current.x) / grid);
     const gy = Math.floor((my - cameraOffset.current.y) / grid);
     
@@ -357,7 +418,11 @@ function GameCanvas({
     const w = rect.width;
     const h = rect.height;
 
-    const heatX = w - 190, heatY = h - 164, heatW = 156, heatH = 120;
+    const isExpanded = mapExpandedRef.current;
+    const heatW = isExpanded ? w * 0.8 : 156;
+    const heatH = isExpanded ? h * 0.8 : 120;
+    const heatX = isExpanded ? w * 0.1 : w - 190;
+    const heatY = isExpanded ? h * 0.1 : h - 164;
     
     if (mx >= heatX && mx <= heatX + heatW && my >= heatY && my <= heatY + heatH) {
       if (isAnimatingRef.current) return;
@@ -385,8 +450,14 @@ function GameCanvas({
          }
       }
       requestAnimationFrame(panStep);
+      
+      if (isExpanded) {
+        setMapExpanded(false);
+      }
       return;
     }
+
+    if (isExpanded) return;
 
     if (!hoverCoordRef.current) return;
     const {x, y} = hoverCoordRef.current;
@@ -451,13 +522,29 @@ function GameCanvas({
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
       />
       
-      {/* HTML UI overlay over canvas */}
-      <div className="absolute right-6 bottom-[140px] z-10 pointer-events-auto">
+      <div 
+        className="absolute z-10 pointer-events-auto"
+        style={{
+           right: mapExpanded ? '10%' : '190px',
+           top: mapExpanded ? '10%' : 'auto',
+           bottom: mapExpanded ? 'auto' : '164px',
+           transform: 'translate(50%, -50%)',
+        }}
+      >
         <button 
           onClick={(e) => { e.stopPropagation(); setMapExpanded(!mapExpanded); }}
-          className="bg-[#3a332b] text-[#f3eadc] px-3 py-1 text-xs font-mono border border-[#5b554c] hover:bg-[#b86d52] transition-colors"
+          className="bg-[#eee5d4] text-[#3a332b] p-1 border border-[#3a332b] hover:bg-[#b86d52] hover:text-[#f3eadc] transition-colors shadow-md"
+          title="Toggle Fullscreen Map"
         >
-          {mapExpanded ? '[-] COMPRESS' : '[+] EXPAND MAP'}
+          {mapExpanded ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+            </svg>
+          )}
         </button>
       </div>
     </div>
@@ -488,7 +575,7 @@ function Leaderboard({ blocks }: { blocks: GameBlock[] }) {
     <h2>Brutalist<br />Leaderboard</h2>
     <div className="sculpture" aria-label="Top players shown as block sculpture">
       {displayPlayers.map((player, index) => <div className="sculpture-column" key={player.name}>
-        <div className={`sculpture-block ${player.tone}`} style={{ height: `${52 + player.blocks * 2.5}px` }}><span>{player.blocks}</span></div>
+        <div className="sculpture-block" style={{ height: `${52 + player.blocks * 2.5}px`, backgroundColor: resolveColor(player.tone) }}><span>{player.blocks}</span></div>
         <span className="sculpture-label">{index + 1}</span><span className="player-name uppercase">{player.name}</span>
       </div>)}
     </div>
@@ -520,28 +607,20 @@ export default function Page() {
   const [stamina, setStamina] = useState(100)
   const cameraOffset = useRef({ x: 0, y: 0, zoom: 1 })
   const [playerName, setPlayerName] = useState<string | null>(null);
+  const [playerColor, setPlayerColor] = useState<{hex: string, name: string} | null>(null);
   const [hoverCoord, setHoverCoord] = useState({x: 0, y: 0});
   
-  // Scramble effect for the cursor text
   const scrambleCursor = useScramble(`CURSOR // ${String(hoverCoord.x).padStart(3, '0')} : ${String(hoverCoord.y).padStart(3, '0')}`, 15);
-
-  // Dynamic Sector derived from center screen coordinates
-  // We approximate using cameraOffset
   const [sectorLabel, setSectorLabel] = useState('SECTOR 0');
   const scrambleSector = useScramble(sectorLabel, 40);
-
-  // Dynamic Zoom label
   const [zoomLabel, setZoomLabel] = useState('ZOOM 1.00×');
   
-  // Polling loop for updating dynamic UI based on camera refs
   useEffect(() => {
     const interval = setInterval(() => {
-      // Calculate sector based on camera distance from origin (x,y)
       const absX = Math.abs(cameraOffset.current.x);
       const absY = Math.abs(cameraOffset.current.y);
       const sectorId = Math.floor((absX + absY) / 500);
       setSectorLabel(`SECTOR ${sectorId}`);
-      
       setZoomLabel(`ZOOM ${cameraOffset.current.zoom.toFixed(2)}×`);
     }, 200);
     return () => clearInterval(interval);
@@ -549,12 +628,11 @@ export default function Page() {
 
   useEffect(() => {
     const saved = localStorage.getItem('grid_player_name');
-    if (saved) setPlayerName(saved);
+    if (saved) handleSetHandle(saved);
   }, []);
 
-  // Passive Stamina Regeneration loop (adds 2 stamina per second)
   useEffect(() => {
-    if (!playerName) return; // Don't regen until they enter game
+    if (!playerName) return;
     const interval = setInterval(() => {
       setStamina(s => Math.min(100, s + 1));
     }, 500);
@@ -562,16 +640,17 @@ export default function Page() {
   }, [playerName]);
 
   const handleCapture = (x: number, y: number, adjacent: boolean) => {
-    if (!playerName) return;
+    if (!playerName || !playerColor) return;
     const cost = adjacent ? 10 : 20;
     if (stamina < cost) return;
     setStamina(s => s - cost);
-    sendCapture(x, y, playerName, getPlayerTone(playerName));
+    sendCapture(x, y, playerName, playerColor.hex);
   }
 
   const handleSetHandle = (name: string) => {
     localStorage.setItem('grid_player_name', name);
     setPlayerName(name);
+    setPlayerColor(getPlayerColor(name));
   };
 
   return <main className="game-shell">
@@ -618,7 +697,15 @@ export default function Page() {
             </AnimatePresence>
           </div>
         </section>
-        <div className="sidebar-footer"><span>IDENTITY: {playerName || '???'}</span><span>v.2.00</span></div>
+        <div className="sidebar-footer">
+          <span>IDENTITY: {playerName || '???'}</span>
+          {playerColor && (
+             <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full border border-black/20" style={{ backgroundColor: playerColor.hex }}></span>
+                {playerColor.name.toUpperCase()}
+             </span>
+          )}
+        </div>
       </aside>
     </div>
   </main>
