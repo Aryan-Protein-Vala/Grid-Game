@@ -27,7 +27,16 @@ export function useGameSocket(playerName: string | null, onNameTaken?: () => voi
     if (!playerName) return;
 
     // Connect to the backend with identity, using an env var for production or falling back to localhost
-    const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws';
+    let baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws';
+    if (baseUrl.startsWith('https://')) {
+      baseUrl = baseUrl.replace(/^https:\/\//, 'wss://');
+    } else if (baseUrl.startsWith('http://')) {
+      baseUrl = baseUrl.replace(/^http:\/\//, 'ws://');
+    }
+    baseUrl = baseUrl.replace(/\/+$/, '');
+    if (!baseUrl.endsWith('/ws')) {
+      baseUrl += '/ws';
+    }
     const ws = new WebSocket(`${baseUrl}?name=${encodeURIComponent(playerName)}`);
     wsRef.current = ws;
 
