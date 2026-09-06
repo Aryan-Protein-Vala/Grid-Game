@@ -723,7 +723,20 @@ function Stamina({ stamina }: { stamina: number }) {
 export default function GridGame() {
   const [playerName, setPlayerName] = useState<string | null>(null);
   const [playerColor, setPlayerColor] = useState<{hex: string, name: string} | null>(null);
-  const [stamina, setStamina] = useState(100);
+  const [stamina, setStamina] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedStamina = localStorage.getItem('grid_player_stamina');
+      const savedTime = localStorage.getItem('grid_player_stamina_time');
+      if (savedStamina !== null && savedTime !== null) {
+        const val = parseFloat(savedStamina);
+        const elapsedSecs = (Date.now() - parseInt(savedTime, 10)) / 1000;
+        // 1 point per 500ms = 2 points per sec
+        const regenerated = Math.min(100, Math.max(0, val + elapsedSecs * 2));
+        return Math.floor(regenerated);
+      }
+    }
+    return 100;
+  });
   const [hoverCoord, setHoverCoord] = useState<{x: number, y: number} | null>(null);
   const cameraOffset = useRef({ x: 0, y: 0, zoom: 1 });
   
@@ -763,7 +776,14 @@ export default function GridGame() {
   useEffect(() => {
     if (!playerName) return;
     const interval = setInterval(() => {
-      setStamina(s => Math.min(100, s + 1));
+      setStamina(s => {
+        const next = Math.min(100, s + 1);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('grid_player_stamina', String(next));
+          localStorage.setItem('grid_player_stamina_time', String(Date.now()));
+        }
+        return next;
+      });
     }, 500);
     return () => clearInterval(interval);
   }, [playerName]);
@@ -772,9 +792,16 @@ export default function GridGame() {
     if (!playerName || !playerColor) return;
     const cost = adjacent ? 10 : 20;
     if (stamina < cost) return;
-    setStamina(s => s - cost);
+    setStamina(s => {
+      const next = s - cost;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('grid_player_stamina', String(next));
+        localStorage.setItem('grid_player_stamina_time', String(Date.now()));
+      }
+      return next;
+    });
     sendCapture(x, y, playerName, playerColor.hex);
-  }
+  };
 
   const handleSetHandle = (name: string) => {
     localStorage.setItem('grid_player_name', name);
@@ -805,7 +832,17 @@ export default function GridGame() {
           onHoverUpdate={(x, y) => setHoverCoord({x, y})}
           playerName={playerName || ''}
         />
-        <div className="cursor-readout">{scrambleCursor} <span>•</span> PAN / ZOOM ENABLED</div>
+        <div className="cursor-readout flex items-center justify-between">
+          <div>{scrambleCursor} <span>•</span> PAN / ZOOM ENABLED</div>
+          <a 
+            href="https://github.com/Aryan-Protein-Vala/Grid-Game" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="hover:text-[#b86d52] hidden sm:flex items-center gap-1 font-mono transition-colors tracking-widest text-[9px]"
+          >
+            GITHUB ↗
+          </a>
+        </div>
       </section>
       <aside className="sidebar">
         <div className="paper-clip" aria-hidden="true" />
@@ -832,14 +869,30 @@ export default function GridGame() {
             </AnimatePresence>
           </div>
         </section>
-        <div className="sidebar-footer">
-          <span>IDENTITY: {playerName || '???'}</span>
-          {playerColor && (
-             <span className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full border border-black/20" style={{ backgroundColor: playerColor.hex }}></span>
-                {playerColor.name.toUpperCase()}
-             </span>
-          )}
+        <div className="sidebar-footer flex flex-col gap-2">
+          <div className="flex items-center justify-between w-full">
+            <span>IDENTITY: {playerName || '???'}</span>
+            {playerColor && (
+               <span className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full border border-black/20" style={{ backgroundColor: playerColor.hex }}></span>
+                  {playerColor.name.toUpperCase()}
+               </span>
+            )}
+          </div>
+          <div className="w-full pt-2 border-t border-[#3a332b]/20 flex items-center justify-between text-[10px] tracking-wider text-[#82786b]">
+            <span>REPOSITORY</span>
+            <a 
+              href="https://github.com/Aryan-Protein-Vala/Grid-Game" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:text-[#b86d52] flex items-center gap-1 font-bold text-[#3a332b] transition-colors"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+              </svg>
+              <span>GITHUB ↗</span>
+            </a>
+          </div>
         </div>
       </aside>
     </div>
