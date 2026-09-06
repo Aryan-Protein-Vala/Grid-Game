@@ -79,8 +79,8 @@ function resolveColor(tone: string) {
 function IdentityModal({ onSetHandle, isError }: { onSetHandle: (name: string) => void, isError: boolean }) {
   const [input, setInput] = useState('');
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md" style={{ backgroundColor: 'rgba(238, 229, 212, 0.85)' }}>
-      <div className="vellum-panel w-96 p-8 border border-[#3a332b] shadow-2xl relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md px-4" style={{ backgroundColor: 'rgba(238, 229, 212, 0.85)' }}>
+      <div className="vellum-panel w-full max-w-sm p-8 border border-[#3a332b] shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-16 h-16 bg-[#b86d52] opacity-10 blur-xl transform translate-x-1/2 -translate-y-1/2 rounded-full" />
         <h2 className="text-2xl font-bold mb-6 tracking-tight leading-none">[ ENTER<br/>DESIGNATION ]</h2>
         {isError && (

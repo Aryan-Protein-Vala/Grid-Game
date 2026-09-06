@@ -26,8 +26,9 @@ export function useGameSocket(playerName: string | null, onNameTaken?: () => voi
   useEffect(() => {
     if (!playerName) return;
 
-    // Connect to the backend with identity
-    const ws = new WebSocket(`ws://localhost:8080/ws?name=${encodeURIComponent(playerName)}`);
+    // Connect to the backend with identity, using an env var for production or falling back to localhost
+    const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws';
+    const ws = new WebSocket(`${baseUrl}?name=${encodeURIComponent(playerName)}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
