@@ -1,0 +1,12 @@
+# Binaries
+server
+multiplayer-grid-backend/server
+multiplayer-grid-backend/multiplayer-grid-backend
+*.exe
+*.test
+
+# Dependencies
+node_modules/
+.next/
+dist/
+.DS_Store
