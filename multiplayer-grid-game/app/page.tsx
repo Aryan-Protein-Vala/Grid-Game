@@ -16,6 +16,9 @@ const TONE_COLORS: Record<string, string> = {
 };
 
 function getPlayerColor(name: string): { hex: string, name: string } {
+  if (!name) {
+    return { hex: '#999999', name: 'Unknown' };
+  }
   let hash = 0;
   for (const char of name) {
     hash = char.charCodeAt(0) + ((hash << 5) - hash);
