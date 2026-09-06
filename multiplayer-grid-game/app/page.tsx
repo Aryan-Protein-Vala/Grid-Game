@@ -88,33 +88,92 @@ function resolveColor(tone: string) {
 
 function IdentityModal({ onSetHandle, isError }: { onSetHandle: (name: string) => void, isError: boolean }) {
   const [input, setInput] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md px-4" style={{ backgroundColor: 'rgba(238, 229, 212, 0.85)' }}>
-      <div className="vellum-panel w-full max-w-sm p-8 border border-[#3a332b] shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-16 h-16 bg-[#b86d52] opacity-10 blur-xl transform translate-x-1/2 -translate-y-1/2 rounded-full" />
-        <h2 className="text-2xl font-bold mb-6 tracking-tight leading-none">[ ENTER<br/>DESIGNATION ]</h2>
-        {isError && (
-          <div className="mb-4 text-xs font-mono text-[#b86d52] bg-[#b86d52]/10 p-2 border border-[#b86d52]/20 tracking-wider font-bold">
-            ERROR: IDENTITY ALREADY ACTIVE ON GRID
-          </div>
-        )}
+    <motion.div 
+      className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md px-4" 
+      style={{ backgroundColor: 'rgba(238, 229, 212, 0.85)' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+    >
+      <motion.div 
+        className="vellum-panel w-full max-w-sm p-8 border border-[#3a332b] shadow-2xl relative overflow-hidden"
+        initial={{ opacity: 0, y: 30, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <motion.div 
+          className="absolute top-0 right-0 w-16 h-16 bg-[#b86d52] opacity-10 blur-xl transform translate-x-1/2 -translate-y-1/2 rounded-full"
+          animate={{ scale: [1, 1.3, 1], opacity: [0.1, 0.2, 0.1] }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.h2 
+          className="text-2xl font-bold mb-6 tracking-tight leading-none"
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.35, duration: 0.4 }}
+        >
+          [ ENTER<br/>DESIGNATION ]
+        </motion.h2>
+        <AnimatePresence>
+          {isError && (
+            <motion.div 
+              className="mb-4 text-xs font-mono text-[#b86d52] bg-[#b86d52]/10 p-2 border border-[#b86d52]/20 tracking-wider font-bold"
+              initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+              animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              ERROR: IDENTITY ALREADY ACTIVE ON GRID
+            </motion.div>
+          )}
+        </AnimatePresence>
         <form onSubmit={e => { e.preventDefault(); if (input.trim()) onSetHandle(input.trim().substring(0, 15).toUpperCase()); }}>
-          <input 
-            type="text" 
-            autoFocus
-            className={`w-full bg-transparent border-b-2 p-2 text-xl font-mono focus:outline-none uppercase placeholder-opacity-40 transition-colors ${isError ? 'border-[#b86d52] text-[#b86d52]' : 'border-[#3a332b] focus:border-[#b86d52]'}`}
-            placeholder="GHOST_OP"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            maxLength={15}
-          />
-          <div className="flex justify-between mt-8 text-xs text-[#82786b] font-mono tracking-widest">
-            <span>15 CHAR MAX</span>
-            <button type="submit" className="hover:text-[#b86d52] transition-colors">[ INITIALIZE ]</button>
-          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.45, duration: 0.4 }}
+          >
+            <div className="relative">
+              <input 
+                type="text" 
+                autoFocus
+                className={`w-full bg-transparent border-b-2 p-2 text-xl font-mono focus:outline-none uppercase placeholder-opacity-40 transition-all duration-300 ${isError ? 'border-[#b86d52] text-[#b86d52]' : 'border-[#3a332b] focus:border-[#b86d52]'}`}
+                placeholder="GHOST_OP"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                maxLength={15}
+              />
+              <motion.div 
+                className="absolute bottom-0 left-0 h-[2px] bg-[#b86d52]"
+                initial={{ width: '0%' }}
+                animate={{ width: isFocused ? '100%' : '0%' }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+              />
+            </div>
+          </motion.div>
+          <motion.div 
+            className="flex justify-between mt-8 text-xs text-[#82786b] font-mono tracking-widest"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.55, duration: 0.4 }}
+          >
+            <span>{input.length > 0 ? `${input.length} / 15` : '15 CHAR MAX'}</span>
+            <motion.button 
+              type="submit" 
+              className="hover:text-[#b86d52] transition-colors"
+              whileHover={{ scale: 1.04, x: 2 }}
+              whileTap={{ scale: 0.96 }}
+            >
+              [ INITIALIZE ]
+            </motion.button>
+          </motion.div>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
