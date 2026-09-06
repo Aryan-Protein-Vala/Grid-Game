@@ -84,7 +84,7 @@ export function useGameSocket(playerName: string | null, onNameTaken?: () => voi
     return () => {
       ws.close();
     };
-  }, []);
+  }, [playerName]);
 
   const sendCapture = useCallback((x: number, y: number, owner: string = 'YOU', tone: string = 'terracotta') => {
     setBlocks(prev => {
