@@ -1,0 +1,22 @@
+name: Keep Render Backend Alive
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent the Render free tier from sleeping (it sleeps after 15 mins of inactivity)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        # IMPORTANT: Once you deploy to Render, you will need to add your Render URL to your repository secrets
+        # as RENDER_URL (e.g., https://your-backend.onrender.com)
+        # If the secret is not set, it will safely skip.
+        run: |
+          if [ -n "${{ secrets.RENDER_URL }}" ]; then
+            curl -f "${{ secrets.RENDER_URL }}/health" || echo "Failed to ping, but workflow will continue"
+          else
+            echo "RENDER_URL secret not set. Skipping ping."
+          fi
