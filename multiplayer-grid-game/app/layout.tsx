@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   title: 'Claim / 05 — Multiplayer Grid Study',
   description: 'A tactile real-time multiplayer territory grid interface.',
   generator: 'v0.app',
+  icons: {
+    icon: '/icon.svg',
+    apple: '/icon.svg',
+  },
 }
 
 export const viewport: Viewport = {
