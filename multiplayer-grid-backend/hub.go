@@ -1,5 +1,7 @@
 package main
 
+import "sync"
+
 type Hub struct {
 	// Registered clients.
 	clients map[*Client]bool
@@ -12,14 +14,19 @@ type Hub struct {
 
 	// Unregister requests from clients.
 	unregister chan *Client
+
+	// Track active names to prevent duplicates
+	activeNames map[string]bool
+	mu          sync.Mutex
 }
 
 func newHub() *Hub {
 	return &Hub{
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
+		broadcast:   make(chan []byte),
+		register:    make(chan *Client),
+		unregister:  make(chan *Client),
+		clients:     make(map[*Client]bool),
+		activeNames: make(map[string]bool),
 	}
 }
 
@@ -31,6 +38,9 @@ func (h *Hub) run() {
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
+				h.mu.Lock()
+				delete(h.activeNames, client.name)
+				h.mu.Unlock()
 				close(client.send)
 			}
 		case message := <-h.broadcast:
@@ -40,6 +50,9 @@ func (h *Hub) run() {
 				default:
 					close(client.send)
 					delete(h.clients, client)
+					h.mu.Lock()
+					delete(h.activeNames, client.name)
+					h.mu.Unlock()
 				}
 			}
 		}

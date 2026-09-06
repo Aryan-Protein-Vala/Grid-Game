@@ -24,6 +24,7 @@ type Client struct {
 	conn  *websocket.Conn
 	send  chan []byte
 	redis *redis.Client
+	name  string
 }
 
 type Message struct {
@@ -131,12 +132,30 @@ func (c *Client) writePump() {
 }
 
 func serveWs(hub *Hub, rdb *redis.Client, w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	hub.mu.Lock()
+	if hub.activeNames[name] {
+		hub.mu.Unlock()
+		w.WriteHeader(http.StatusConflict) // 409 Conflict indicates name taken
+		return
+	}
+	hub.activeNames[name] = true
+	hub.mu.Unlock()
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		hub.mu.Lock()
+		delete(hub.activeNames, name)
+		hub.mu.Unlock()
 		log.Println(err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), redis: rdb}
+	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), redis: rdb, name: name}
 	client.hub.register <- client
 
 	go client.writePump()

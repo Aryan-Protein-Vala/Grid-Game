@@ -17,28 +17,36 @@ export interface GameEvent {
   timestamp: number;
 }
 
-export function useGameSocket() {
+export function useGameSocket(playerName: string | null, onNameTaken?: () => void) {
   const [blocks, setBlocks] = useState<GameBlock[]>([]);
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    // Connect to the backend
-    const ws = new WebSocket('ws://localhost:8080/ws');
+    if (!playerName) return;
+
+    // Connect to the backend with identity
+    const ws = new WebSocket(`ws://localhost:8080/ws?name=${encodeURIComponent(playerName)}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setConnectionStatus('connected');
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       setConnectionStatus('disconnected');
     };
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
       setConnectionStatus('disconnected');
+      
+      // Since browser JS cannot read the HTTP status code of a WebSocket connection failure directly,
+      // a rapid drop before `onopen` heavily implies our 409 Conflict rejection.
+      if (ws.readyState === WebSocket.CLOSED) {
+         onNameTaken?.();
+      }
     };
 
     ws.onmessage = (event) => {

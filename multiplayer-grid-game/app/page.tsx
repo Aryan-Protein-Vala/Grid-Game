@@ -76,18 +76,23 @@ function resolveColor(tone: string) {
   return TONE_COLORS[tone] || TONE_COLORS['charcoal'];
 }
 
-function IdentityModal({ onSetHandle }: { onSetHandle: (name: string) => void }) {
+function IdentityModal({ onSetHandle, isError }: { onSetHandle: (name: string) => void, isError: boolean }) {
   const [input, setInput] = useState('');
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md" style={{ backgroundColor: 'rgba(238, 229, 212, 0.85)' }}>
       <div className="vellum-panel w-96 p-8 border border-[#3a332b] shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-16 h-16 bg-[#b86d52] opacity-10 blur-xl transform translate-x-1/2 -translate-y-1/2 rounded-full" />
         <h2 className="text-2xl font-bold mb-6 tracking-tight leading-none">[ ENTER<br/>DESIGNATION ]</h2>
+        {isError && (
+          <div className="mb-4 text-xs font-mono text-[#b86d52] bg-[#b86d52]/10 p-2 border border-[#b86d52]/20 tracking-wider font-bold">
+            ERROR: IDENTITY ALREADY ACTIVE ON GRID
+          </div>
+        )}
         <form onSubmit={e => { e.preventDefault(); if (input.trim()) onSetHandle(input.trim().substring(0, 15).toUpperCase()); }}>
           <input 
             type="text" 
             autoFocus
-            className="w-full bg-transparent border-b-2 border-[#3a332b] p-2 text-xl font-mono focus:outline-none focus:border-[#b86d52] uppercase placeholder-opacity-40"
+            className={`w-full bg-transparent border-b-2 p-2 text-xl font-mono focus:outline-none uppercase placeholder-opacity-40 transition-colors ${isError ? 'border-[#b86d52] text-[#b86d52]' : 'border-[#3a332b] focus:border-[#b86d52]'}`}
             placeholder="GHOST_OP"
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -660,22 +665,32 @@ function Stamina({ stamina }: { stamina: number }) {
       </motion.div>
     </div>
     <div className="stamina-readout"><strong>{Math.floor(stamina)}%</strong><span>{Math.floor(stamina / 10)} / 10 ACTIONS</span></div>
-    <div className="rule-label"><span>REPLENISH RATE</span><span>+2/s</span></div>
-  </section>
+</section>
 }
 
-export default function Page() {
-  const { blocks, events, sendCapture, connectionStatus } = useGameSocket()
-  const [stamina, setStamina] = useState(100)
-  const cameraOffset = useRef({ x: 0, y: 0, zoom: 1 })
+export default function GridGame() {
   const [playerName, setPlayerName] = useState<string | null>(null);
   const [playerColor, setPlayerColor] = useState<{hex: string, name: string} | null>(null);
-  const [hoverCoord, setHoverCoord] = useState({x: 0, y: 0});
+  const [stamina, setStamina] = useState(100);
+  const [hoverCoord, setHoverCoord] = useState<{x: number, y: number} | null>(null);
+  const cameraOffset = useRef({ x: 0, y: 0, zoom: 1 });
   
-  const scrambleCursor = useScramble(`CURSOR // ${String(hoverCoord.x).padStart(3, '0')} : ${String(hoverCoord.y).padStart(3, '0')}`, 15);
+  const [nameTaken, setNameTaken] = useState(false);
+
+  const { blocks, events, sendCapture, connectionStatus } = useGameSocket(
+     playerName, 
+     () => {
+        // Name taken
+        localStorage.removeItem('grid_player_name');
+        setPlayerName(null);
+        setNameTaken(true);
+     }
+  );
+
+  const scrambleCursor = useScramble(hoverCoord ? `[ ${hoverCoord.x} : ${hoverCoord.y} ]` : '[ NO_TARGET ]');
   const [sectorLabel, setSectorLabel] = useState('SECTOR 0');
-  const scrambleSector = useScramble(sectorLabel, 40);
   const [zoomLabel, setZoomLabel] = useState('ZOOM 1.00×');
+  const scrambleSector = useScramble(sectorLabel, 40);
   
   useEffect(() => {
     const interval = setInterval(() => {
@@ -711,12 +726,26 @@ export default function Page() {
 
   const handleSetHandle = (name: string) => {
     localStorage.setItem('grid_player_name', name);
+    setNameTaken(false);
     setPlayerName(name);
     setPlayerColor(getPlayerColor(name));
+    
+    // Hash name to calculate unique spawn offset
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+       hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    // Convert to deterministic grid coordinate roughly in -1000 to +1000 range
+    const spawnX = (hash % 1000);
+    const spawnY = ((hash >> 8) % 1000);
+    
+    // Convert to pixel offset (assuming baseGrid is roughly 45 on spawn)
+    cameraOffset.current.x = -(spawnX * 45);
+    cameraOffset.current.y = -(spawnY * 45);
   };
 
   return <main className="game-shell">
-    {!playerName && <IdentityModal onSetHandle={handleSetHandle} />}
+    {!playerName && <IdentityModal onSetHandle={handleSetHandle} isError={nameTaken} />}
     <header className="topbar">
       <div className="brand-lockup"><span className="brand-mark">▦</span><span>CLAIM / 05</span><span className="brand-divider" /><span className="brand-subtitle">MULTIPLAYER GRID STUDY</span></div>
       <div className="top-status"><span className="status-dot" />{connectionStatus.toUpperCase()}</div>
