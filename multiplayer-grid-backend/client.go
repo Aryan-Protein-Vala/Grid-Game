@@ -186,6 +186,13 @@ func serveWs(hub *Hub, rdb *redis.Client, w http.ResponseWriter, r *http.Request
 					"blocks": blocks,
 				}
 				syncBytes, _ := json.Marshal(syncMsg)
+				
+				// Prevent panic if client disconnects while scanning Redis
+				defer func() {
+					if r := recover(); r != nil {
+						log.Println("Recovered from panic writing to closed client channel")
+					}
+				}()
 				client.send <- syncBytes
 			}
 		}
