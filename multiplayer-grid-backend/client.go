@@ -76,8 +76,14 @@ func (c *Client) readPump() {
 			ctx := context.Background()
 			key := fmt.Sprintf("block:%d:%d", payload.X, payload.Y)
 			
+			// Prepare JSON string for storage
+			blockData, _ := json.Marshal(map[string]string{
+				"owner": payload.Owner,
+				"tone":  payload.Tone,
+			})
+			
 			// SETNX lock
-			set, err := c.redis.SetNX(ctx, key, payload.Owner, 0).Result()
+			set, err := c.redis.SetNX(ctx, key, string(blockData), 0).Result()
 			if err != nil {
 				log.Printf("Redis error: %v", err)
 				continue
@@ -135,4 +141,53 @@ func serveWs(hub *Hub, rdb *redis.Client, w http.ResponseWriter, r *http.Request
 
 	go client.writePump()
 	go client.readPump()
+
+	// Send initial state (SYNC) to the connected client
+	go func() {
+		ctx := context.Background()
+		var cursor uint64
+		var keys []string
+		for {
+			var k []string
+			var err error
+			k, cursor, err = rdb.Scan(ctx, cursor, "block:*:*", 100).Result()
+			if err != nil {
+				log.Println("Redis scan error:", err)
+				break
+			}
+			keys = append(keys, k...)
+			if cursor == 0 {
+				break
+			}
+		}
+
+		if len(keys) > 0 {
+			vals, err := rdb.MGet(ctx, keys...).Result()
+			if err == nil {
+				var blocks []map[string]interface{}
+				for i, keyStr := range keys {
+					var x, y int
+					fmt.Sscanf(keyStr, "block:%d:%d", &x, &y)
+					
+					valStr, ok := vals[i].(string)
+					if !ok {
+						blocks = append(blocks, map[string]interface{}{"x": x, "y": y, "owner": vals[i], "tone": "charcoal"})
+					} else {
+						var data map[string]string
+						if err := json.Unmarshal([]byte(valStr), &data); err == nil {
+							blocks = append(blocks, map[string]interface{}{"x": x, "y": y, "owner": data["owner"], "tone": data["tone"]})
+						} else {
+							blocks = append(blocks, map[string]interface{}{"x": x, "y": y, "owner": valStr, "tone": "charcoal"})
+						}
+					}
+				}
+				syncMsg := map[string]interface{}{
+					"type": "SYNC",
+					"blocks": blocks,
+				}
+				syncBytes, _ := json.Marshal(syncMsg)
+				client.send <- syncBytes
+			}
+		}
+	}()
 }
