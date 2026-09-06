@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import rough from 'roughjs'
 import { useGameSocket, GameBlock, GameEvent } from '../hooks/useGameSocket'
 import { useScramble } from '../hooks/useScramble'
+import { playPlink } from '../lib/sound'
 
 const TONE_COLORS: Record<string, string> = {
   charcoal: '#3a332b',
@@ -859,6 +860,7 @@ export default function GridGame() {
       }
       return next;
     });
+    playPlink();
     sendCapture(x, y, playerName, playerColor.hex);
   };
 
