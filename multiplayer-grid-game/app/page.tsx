@@ -71,6 +71,16 @@ function getPlayerColor(name: string): { hex: string, name: string } {
   return { hex, name: `${adjective} ${noun}` };
 }
 
+export function getPlayerSpawn(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+     hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const spawnX = (hash % 1000);
+  const spawnY = ((hash >> 8) % 1000);
+  return { x: spawnX, y: spawnY };
+}
+
 function resolveColor(tone: string) {
   if (tone.startsWith('#')) return tone;
   return TONE_COLORS[tone] || TONE_COLORS['charcoal'];
@@ -151,38 +161,40 @@ function GameCanvas({
     lastEventCountRef.current = events.length;
   }, [events]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.code === 'Escape') {
-        e.preventDefault();
-        // Smoothly animate back to 0,0
-        if (isAnimatingRef.current) return;
-        isAnimatingRef.current = true;
-        const startX = cameraOffset.current.x;
-        const startY = cameraOffset.current.y;
-        const startZ = cameraOffset.current.zoom;
-        let progress = 0;
-        const animateHome = () => {
-          progress += 0.05;
-          if (progress >= 1) {
-            cameraOffset.current.x = 0;
-            cameraOffset.current.y = 0;
-            cameraOffset.current.zoom = 1;
-            isAnimatingRef.current = false;
-            return;
-          }
-          const easeOut = 1 - Math.pow(1 - progress, 3);
-          cameraOffset.current.x = startX + (0 - startX) * easeOut;
-          cameraOffset.current.y = startY + (0 - startY) * easeOut;
-          cameraOffset.current.zoom = startZ + (1 - startZ) * easeOut;
-          requestAnimationFrame(animateHome);
-        };
-        requestAnimationFrame(animateHome);
+  const spawnInitializedRef = useRef<string | null>(null);
+
+  const recenterToSpawn = () => {
+    if (isAnimatingRef.current || !canvasRef.current || !playerName) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const spawn = getPlayerSpawn(playerName);
+    const baseGrid = Math.max(34, Math.min(56, rect.width / 25));
+    const targetZoom = 1;
+    const targetGrid = baseGrid * targetZoom;
+    const targetX = rect.width / 2 - spawn.x * targetGrid;
+    const targetY = rect.height / 2 - spawn.y * targetGrid;
+
+    isAnimatingRef.current = true;
+    const startX = cameraOffset.current.x;
+    const startY = cameraOffset.current.y;
+    const startZ = cameraOffset.current.zoom;
+    let progress = 0;
+    const animateHome = () => {
+      progress += 0.05;
+      if (progress >= 1) {
+        cameraOffset.current.x = targetX;
+        cameraOffset.current.y = targetY;
+        cameraOffset.current.zoom = targetZoom;
+        isAnimatingRef.current = false;
+        return;
       }
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      cameraOffset.current.x = startX + (targetX - startX) * easeOut;
+      cameraOffset.current.y = startY + (targetY - startY) * easeOut;
+      cameraOffset.current.zoom = startZ + (targetZoom - startZ) * easeOut;
+      requestAnimationFrame(animateHome);
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cameraOffset]);
+    requestAnimationFrame(animateHome);
+  };
 
   const isAdjacent = (gx: number, gy: number) => {
     const owned = blocksRef.current.filter(b => b.owner === playerName && b.status === 'confirmed');
@@ -258,6 +270,15 @@ function GameCanvas({
       const zoom = cameraOffset.current.zoom;
       const baseGrid = Math.max(34, Math.min(56, w / 25));
       const grid = baseGrid * zoom;
+
+      // Initialize camera centered directly onto player's spawn point
+      if (playerName && spawnInitializedRef.current !== playerName && w > 0 && h > 0) {
+        const spawn = getPlayerSpawn(playerName);
+        cameraOffset.current.x = w / 2 - spawn.x * grid;
+        cameraOffset.current.y = h / 2 - spawn.y * grid;
+        cameraOffset.current.zoom = 1;
+        spawnInitializedRef.current = playerName;
+      }
 
       // Restrict camera offset to not go beyond the minimap bounds (-2500 to 2500 grid units)
       const limit = 2500 * grid;
@@ -386,6 +407,21 @@ function GameCanvas({
             context.fillRect(bx - pSize/2, by - pSize/2, pSize, pSize);
         }
       });
+
+      // Draw Player Spawn Point Indicator on Minimap
+      if (playerName) {
+        const spawn = getPlayerSpawn(playerName);
+        const normSX = (spawn.x + 2500) / 5000;
+        const normSY = (spawn.y + 2500) / 5000;
+        if (normSX >= 0 && normSX <= 1 && normSY >= 0 && normSY <= 1) {
+          const sx = heatX + normSX * heatW;
+          const sy = heatY + normSY * heatH;
+          context.fillStyle = '#b86d52';
+          context.beginPath();
+          context.arc(sx, sy, isExpanded ? 4 : 2.5, 0, Math.PI * 2);
+          context.fill();
+        }
+      }
       
       const viewPropX = (-cameraOffset.current.x / grid + 2500) / 5000;
       const viewPropY = (-cameraOffset.current.y / grid + 2500) / 5000;
@@ -555,15 +591,14 @@ function GameCanvas({
           break;
         case 'Escape':
         case ' ':
-          cameraOffset.current.x = 0;
-          cameraOffset.current.y = 0;
-          cameraOffset.current.zoom = 1;
+          e.preventDefault();
+          recenterToSpawn();
           break;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [playerName]);
 
   useEffect(() => {
     mapExpandedRef.current = mapExpanded;
@@ -586,22 +621,22 @@ function GameCanvas({
         <p className="font-bold text-[#eee5d4] mb-2 opacity-100">/// SYSTEMS_MANUAL</p>
         <p><span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">SWIPE</span> or <span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">DRAG</span> to navigate sector</p>
         <p><span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">PINCH</span> or <span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">CTRL+SCROLL</span> to optical zoom</p>
-        <p><span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">SPACE</span> or <span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">ESC</span> to recenter optics</p>
+        <p><span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">SPACE</span> or <span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">ESC</span> to recenter to your spawn</p>
         <p><span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">CLICK MINIMAP</span> for rapid orbital drop</p>
       </div>
       
       <div 
-        className="absolute z-10 pointer-events-auto"
+        className="absolute z-10 pointer-events-auto flex flex-col gap-1.5"
         style={{
            right: mapExpanded ? '10%' : '34px',
            top: mapExpanded ? '10%' : 'calc(100% - 164px)',
-           transform: mapExpanded ? 'translate(50%, -50%)' : 'translate(50%, -50%)',
+           transform: 'translate(50%, -50%)',
         }}
       >
         <button 
           onClick={(e) => { e.stopPropagation(); setMapExpanded(!mapExpanded); }}
           className="bg-[#eee5d4] text-[#3a332b] p-1 border border-[#3a332b] hover:bg-[#b86d52] hover:text-[#f3eadc] transition-colors shadow-md"
-          title="Toggle Fullscreen Map"
+          title={mapExpanded ? "Contract Map" : "Expand Satellite Map"}
         >
           {mapExpanded ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
@@ -613,6 +648,23 @@ function GameCanvas({
             </svg>
           )}
         </button>
+
+        {!mapExpanded && (
+          <button 
+            onClick={(e) => { e.stopPropagation(); recenterToSpawn(); }}
+            className="bg-[#eee5d4] text-[#3a332b] p-1 border border-[#3a332b] hover:bg-[#b86d52] hover:text-[#f3eadc] transition-colors shadow-md flex items-center justify-center"
+            title="Recenter to Spawn Location (SPACE / ESC)"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="7"/>
+              <line x1="12" y1="1" x2="12" y2="4"/>
+              <line x1="12" y1="20" x2="12" y2="23"/>
+              <line x1="1" y1="12" x2="4" y2="12"/>
+              <line x1="20" y1="12" x2="23" y2="12"/>
+              <circle cx="12" cy="12" r="2" fill="currentColor"/>
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   )
@@ -729,19 +781,6 @@ export default function GridGame() {
     setNameTaken(false);
     setPlayerName(name);
     setPlayerColor(getPlayerColor(name));
-    
-    // Hash name to calculate unique spawn offset
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-       hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    // Convert to deterministic grid coordinate roughly in -1000 to +1000 range
-    const spawnX = (hash % 1000);
-    const spawnY = ((hash >> 8) % 1000);
-    
-    // Convert to pixel offset (assuming baseGrid is roughly 45 on spawn)
-    cameraOffset.current.x = -(spawnX * 45);
-    cameraOffset.current.y = -(spawnY * 45);
   };
 
   return <main className="game-shell">

@@ -37,7 +37,17 @@ export function useGameSocket(playerName: string | null, onNameTaken?: () => voi
     if (!baseUrl.endsWith('/ws')) {
       baseUrl += '/ws';
     }
-    const ws = new WebSocket(`${baseUrl}?name=${encodeURIComponent(playerName)}`);
+    // Retrieve or initialize unique player session token
+    let token = '';
+    if (typeof window !== 'undefined') {
+      token = localStorage.getItem('grid_player_token') || '';
+      if (!token) {
+        token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+        localStorage.setItem('grid_player_token', token);
+      }
+    }
+
+    const ws = new WebSocket(`${baseUrl}?name=${encodeURIComponent(playerName)}&token=${encodeURIComponent(token)}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -46,17 +56,15 @@ export function useGameSocket(playerName: string | null, onNameTaken?: () => voi
 
     ws.onclose = (event) => {
       setConnectionStatus('disconnected');
+      // Only trigger onNameTaken if the server explicitly rejected the connection with code 4001 (NAME_TAKEN)
+      if (event.code === 4001) {
+        onNameTaken?.();
+      }
     };
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
       setConnectionStatus('disconnected');
-      
-      // Since browser JS cannot read the HTTP status code of a WebSocket connection failure directly,
-      // a rapid drop before `onopen` heavily implies our 409 Conflict rejection.
-      if (ws.readyState === WebSocket.CLOSED) {
-         onNameTaken?.();
-      }
     };
 
     ws.onmessage = (event) => {

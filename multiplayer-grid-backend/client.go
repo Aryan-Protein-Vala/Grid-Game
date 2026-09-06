@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
@@ -25,6 +26,7 @@ type Client struct {
 	send  chan []byte
 	redis *redis.Client
 	name  string
+	token string
 }
 
 type Message struct {
@@ -133,29 +135,44 @@ func (c *Client) writePump() {
 
 func serveWs(hub *Hub, rdb *redis.Client, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
+	token := r.URL.Query().Get("token")
 	if name == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	hub.mu.Lock()
-	if hub.activeNames[name] {
-		hub.mu.Unlock()
-		w.WriteHeader(http.StatusConflict) // 409 Conflict indicates name taken
-		return
-	}
-	hub.activeNames[name] = true
-	hub.mu.Unlock()
-
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		hub.mu.Lock()
-		delete(hub.activeNames, name)
-		hub.mu.Unlock()
-		log.Println(err)
+		log.Println("Upgrade error:", err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), redis: rdb, name: name}
+
+	hub.mu.Lock()
+	oldClient, exists := hub.clientsByName[name]
+	if exists {
+		// If another user with a different token is currently connected
+		if token != "" && oldClient.token != "" && oldClient.token != token {
+			hub.mu.Unlock()
+			closeMsg := websocket.FormatCloseMessage(4001, "NAME_TAKEN")
+			conn.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second))
+			conn.Close()
+			return
+		}
+		// Same user reconnecting or refreshing: gracefully close previous socket
+		delete(hub.clients, oldClient)
+		delete(hub.clientsByName, name)
+		oldClient.conn.Close()
+	}
+	hub.mu.Unlock()
+
+	client := &Client{
+		hub:   hub,
+		conn:  conn,
+		send:  make(chan []byte, 256),
+		redis: rdb,
+		name:  name,
+		token: token,
+	}
 	client.hub.register <- client
 
 	go client.writePump()

@@ -6,6 +6,9 @@ type Hub struct {
 	// Registered clients.
 	clients map[*Client]bool
 
+	// Active clients mapped by player name
+	clientsByName map[string]*Client
+
 	// Inbound messages from the clients.
 	broadcast chan []byte
 
@@ -15,18 +18,16 @@ type Hub struct {
 	// Unregister requests from clients.
 	unregister chan *Client
 
-	// Track active names to prevent duplicates
-	activeNames map[string]bool
-	mu          sync.Mutex
+	mu sync.Mutex
 }
 
 func newHub() *Hub {
 	return &Hub{
-		broadcast:   make(chan []byte),
-		register:    make(chan *Client),
-		unregister:  make(chan *Client),
-		clients:     make(map[*Client]bool),
-		activeNames: make(map[string]bool),
+		broadcast:     make(chan []byte),
+		register:      make(chan *Client),
+		unregister:    make(chan *Client),
+		clients:       make(map[*Client]bool),
+		clientsByName: make(map[string]*Client),
 	}
 }
 
@@ -34,27 +35,36 @@ func (h *Hub) run() {
 	for {
 		select {
 		case client := <-h.register:
+			h.mu.Lock()
 			h.clients[client] = true
+			h.clientsByName[client.name] = client
+			h.mu.Unlock()
+
 		case client := <-h.unregister:
+			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
-				h.mu.Lock()
-				delete(h.activeNames, client.name)
-				h.mu.Unlock()
+				if h.clientsByName[client.name] == client {
+					delete(h.clientsByName, client.name)
+				}
 				close(client.send)
 			}
+			h.mu.Unlock()
+
 		case message := <-h.broadcast:
+			h.mu.Lock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
 					close(client.send)
 					delete(h.clients, client)
-					h.mu.Lock()
-					delete(h.activeNames, client.name)
-					h.mu.Unlock()
+					if h.clientsByName[client.name] == client {
+						delete(h.clientsByName, client.name)
+					}
 				}
 			}
+			h.mu.Unlock()
 		}
 	}
 }
