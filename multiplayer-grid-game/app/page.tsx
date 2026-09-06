@@ -146,6 +146,39 @@ function GameCanvas({
     lastEventCountRef.current = events.length;
   }, [events]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' || e.code === 'Escape') {
+        e.preventDefault();
+        // Smoothly animate back to 0,0
+        if (isAnimatingRef.current) return;
+        isAnimatingRef.current = true;
+        const startX = cameraOffset.current.x;
+        const startY = cameraOffset.current.y;
+        const startZ = cameraOffset.current.zoom;
+        let progress = 0;
+        const animateHome = () => {
+          progress += 0.05;
+          if (progress >= 1) {
+            cameraOffset.current.x = 0;
+            cameraOffset.current.y = 0;
+            cameraOffset.current.zoom = 1;
+            isAnimatingRef.current = false;
+            return;
+          }
+          const easeOut = 1 - Math.pow(1 - progress, 3);
+          cameraOffset.current.x = startX + (0 - startX) * easeOut;
+          cameraOffset.current.y = startY + (0 - startY) * easeOut;
+          cameraOffset.current.zoom = startZ + (1 - startZ) * easeOut;
+          requestAnimationFrame(animateHome);
+        };
+        requestAnimationFrame(animateHome);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [cameraOffset]);
+
   const isAdjacent = (gx: number, gy: number) => {
     const owned = blocksRef.current.filter(b => b.owner === playerName && b.status === 'confirmed');
     if (owned.length === 0) return true;
@@ -166,13 +199,21 @@ function GameCanvas({
         setTimeout(() => { isDraggingRef.current = false; }, 50);
       }
     },
-    onWheel: ({ delta: [_, dy], event }) => {
+    onWheel: ({ delta: [dx, dy], event }) => {
       if (mapExpandedRef.current) return;
-      const zoomSensitivity = 0.005;
-      const prevZoom = cameraOffset.current.zoom;
-      let newZoom = prevZoom * Math.exp(-dy * zoomSensitivity);
-      newZoom = Math.max(0.1, Math.min(newZoom, 5));
-      cameraOffset.current.zoom = newZoom;
+      
+      // On Mac/trackpads, a pinch-to-zoom fires a wheel event with ctrlKey=true
+      if (event.ctrlKey) {
+        const zoomSensitivity = 0.005;
+        const prevZoom = cameraOffset.current.zoom;
+        let newZoom = prevZoom * Math.exp(-dy * zoomSensitivity);
+        newZoom = Math.max(0.1, Math.min(newZoom, 5));
+        cameraOffset.current.zoom = newZoom;
+      } else {
+        // Two-finger swipe or standard mouse wheel
+        cameraOffset.current.x -= dx;
+        cameraOffset.current.y -= dy;
+      }
     }
   }, {
     wheel: { eventOptions: { passive: false } }
@@ -534,6 +575,15 @@ function GameCanvas({
         onClick={handleClick}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
       />
+      
+      {/* Controls HUD */}
+      <div className="absolute bottom-6 left-6 z-10 pointer-events-none mix-blend-difference text-[#eee5d4]/70 font-mono text-[10px] sm:text-xs space-y-1.5 opacity-80 uppercase tracking-widest hidden sm:block">
+        <p className="font-bold text-[#eee5d4] mb-2 opacity-100">/// SYSTEMS_MANUAL</p>
+        <p><span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">SWIPE</span> or <span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">DRAG</span> to navigate sector</p>
+        <p><span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">PINCH</span> or <span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">CTRL+SCROLL</span> to optical zoom</p>
+        <p><span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">SPACE</span> or <span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">ESC</span> to recenter optics</p>
+        <p><span className="text-black bg-[#eee5d4]/90 px-1 rounded mr-1">CLICK MINIMAP</span> for rapid orbital drop</p>
+      </div>
       
       <div 
         className="absolute z-10 pointer-events-auto"
