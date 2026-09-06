@@ -209,6 +209,16 @@ function GameCanvas({
       const zoom = cameraOffset.current.zoom;
       const baseGrid = Math.max(34, Math.min(56, w / 25));
       const grid = baseGrid * zoom;
+
+      // Restrict camera offset to not go beyond the minimap bounds (-2500 to 2500 grid units)
+      const limit = 2500 * grid;
+      const minX = -limit + w / 2;
+      const maxX = limit + w / 2;
+      const minY = -limit + h / 2;
+      const maxY = limit + h / 2;
+      cameraOffset.current.x = Math.max(minX, Math.min(maxX, cameraOffset.current.x));
+      cameraOffset.current.y = Math.max(minY, Math.min(maxY, cameraOffset.current.y));
+
       const offX = cameraOffset.current.x % grid;
       const offY = cameraOffset.current.y % grid;
 
@@ -525,10 +535,9 @@ function GameCanvas({
       <div 
         className="absolute z-10 pointer-events-auto"
         style={{
-           right: mapExpanded ? '10%' : '190px',
-           top: mapExpanded ? '10%' : 'auto',
-           bottom: mapExpanded ? 'auto' : '164px',
-           transform: 'translate(50%, -50%)',
+           right: mapExpanded ? '10%' : '34px',
+           top: mapExpanded ? '10%' : 'calc(100% - 164px)',
+           transform: mapExpanded ? 'translate(50%, -50%)' : 'translate(50%, -50%)',
         }}
       >
         <button 
