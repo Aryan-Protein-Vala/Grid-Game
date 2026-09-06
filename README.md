@@ -24,7 +24,7 @@
 
 | Component | Platform | URL / Endpoint | Details |
 | :--- | :--- | :--- | :--- |
-| **Frontend Web App** | **Vercel** | [Live on Vercel]([https://vercel.com](https://multiplayer-grid-game-theta.vercel.app/)) | Edge-optimized Next.js 14 App Router client |
+| **Frontend Web App** | **Vercel** | [Live on Vercel]([https://multiplayer-grid-game-theta.vercel.app/]) | Edge-optimized Next.js 14 App Router client |
 | **Backend WebSocket Engine** | **Render** | `wss://grid-game-4rri.onrender.com/ws` | High-concurrency Go WebSocket cluster |
 | **Engine Health Check** | **Render** | [`https://grid-game-4rri.onrender.com/health`](https://grid-game-4rri.onrender.com/health) | 24/7 liveness monitoring target |
 | **State & Pub/Sub Layer** | **Render Key-Value** | `redis://...:6379` | Sub-millisecond atomic cell locking & broadcasts |
