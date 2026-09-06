@@ -26,8 +26,8 @@ export function useGameSocket(playerName: string | null, onNameTaken?: () => voi
   useEffect(() => {
     if (!playerName) return;
 
-    // Connect to the backend with identity, using an env var for production or falling back to localhost
-    let baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws';
+    // Connect to the backend with identity, using an env var for production or falling back to defaults
+    let baseUrl = process.env.NEXT_PUBLIC_WS_URL || (process.env.NODE_ENV === 'production' ? 'wss://grid-game-4rri.onrender.com/ws' : 'ws://localhost:8080/ws');
     if (baseUrl.startsWith('https://')) {
       baseUrl = baseUrl.replace(/^https:\/\//, 'wss://');
     } else if (baseUrl.startsWith('http://')) {

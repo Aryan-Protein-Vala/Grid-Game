@@ -28,7 +28,7 @@
 
 | Component | Platform | URL / Endpoint | Details |
 | :--- | :--- | :--- | :--- |
-| **Frontend Web App** | **Vercel** | [**multiplayer-grid-game-theta.vercel.app**](https://multiplayer-grid-game-theta.vercel.app/) | Edge-optimized Next.js 14 App Router client |
+| **Frontend Web App** | **Vercel** | [**multiplayer-grid-game-theta.vercel.app**](https://multiplayer-grid-game-theta.vercel.app/) | Edge-optimized Next.js 16 App Router client |
 | **Backend WebSocket Engine** | **Render** | `wss://grid-game-4rri.onrender.com/ws` | High-concurrency Go WebSocket cluster |
 | **Engine Health Check** | **Render** | [`https://grid-game-4rri.onrender.com/health`](https://grid-game-4rri.onrender.com/health) | 24/7 liveness monitoring target |
 | **State & Pub/Sub Layer** | **Render Key-Value** | `redis://...:6379` | Sub-millisecond atomic cell locking & broadcasts |
@@ -79,12 +79,12 @@
       <td align="center"><strong>State & Cache (Render)</strong></td>
     </tr>
     <tr>
-      <td align="center">Next.js 14 (App Router)</td>
-      <td align="center">Golang 1.21+</td>
+      <td align="center">Next.js 16 (App Router)</td>
+      <td align="center">Golang 1.23+</td>
       <td align="center">Redis 7 (Key-Value)</td>
     </tr>
     <tr>
-      <td align="center">React 18 & TypeScript</td>
+      <td align="center">React 19 & TypeScript</td>
       <td align="center">Gorilla WebSocket</td>
       <td align="center">Redis Pub/Sub Engine</td>
     </tr>
@@ -117,6 +117,12 @@
 - 🎨 **Identity Hashing**: Identities act as cryptographic seeds to generate deterministic HSL color palettes and distant spawn locations.
 - 🔋 **Liquid Ink Stamina Economy**: Capturing adjacent blocks costs 10 ink, while remote captures cost 20 ink. Ink stamina persists across reloads and regenerates dynamically.
 - 🛰️ **Global Satellite Minimap**: Full-screen expandable minimap with live heat indicators, player location crosshair, and quick orbital drops.
+
+---
+
+## 🔒 Security & Trade-offs
+
+- **Client-Side Identity Trust:** For the sake of this interactive demo and frictionless onboarding, the backend server currently trusts the owner identity submitted by the client in the WebSocket `CAPTURE` payload. In a fully secured production environment, identities would be authenticated and strictly validated server-side (e.g., via JWTs or signed session cookies) before writing claims to the database.
 
 ---
 
