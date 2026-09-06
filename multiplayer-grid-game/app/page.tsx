@@ -747,7 +747,12 @@ export default function GridGame() {
   return <main className="game-shell">
     {!playerName && <IdentityModal onSetHandle={handleSetHandle} isError={nameTaken} />}
     <header className="topbar">
-      <div className="brand-lockup"><span className="brand-mark">▦</span><span>CLAIM / 05</span><span className="brand-divider" /><span className="brand-subtitle">MULTIPLAYER GRID STUDY</span></div>
+      <div className="brand-lockup">
+        <img src="/icon.svg" alt="Logo" className="w-5 h-5 mr-1" />
+        <span>CLAIM / 05</span>
+        <span className="brand-divider" />
+        <span className="brand-subtitle">MULTIPLAYER GRID STUDY</span>
+      </div>
       <div className="top-status"><span className="status-dot" />{connectionStatus.toUpperCase()}</div>
     </header>
     <div className="game-layout">
